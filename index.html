@@ -22,7 +22,7 @@
     .toolbar{display:flex;gap:12px;flex-wrap:wrap;align-items:center;margin:16px 0}
     .sel,.btn,.input{border:1px solid var(--line);border-radius:12px;padding:10px 12px;background:#fff;font:inherit}
     .btn{background:var(--brand);color:#fff;border-color:transparent;cursor:pointer}
-    .btn.secondary{background:#fff;color:var(--ink);border-color:var(--line)}
+    .btn.secondary{background:#fff;color:#1f2937;border-color:var(--line)}
     .btn[disabled]{opacity:.5;cursor:not-allowed}
     .legend{margin-left:auto;display:flex;align-items:center;gap:10px;color:var(--muted)}
     .dot{width:12px;height:12px;border-radius:3px;display:inline-block;border:1px solid}
@@ -70,14 +70,20 @@
   </header>
 
   <div class="wrap">
-    <!-- AUTH BAR -->
+    <!-- AUTH BAR (Email/Password) -->
     <section class="panel" aria-label="Σύνδεση">
       <div class="row">
-        <button id="loginGoogle" class="btn">Σύνδεση με Google</button>
-        <span id="userLine" class="hint"></span>
-        <span id="roleBadge" class="tag" style="display:none"></span>
+        <input id="email" class="input" placeholder="Email" type="email" autocomplete="username" />
+        <input id="password" class="input" placeholder="Κωδικός" type="password" autocomplete="current-password" />
+        <button id="loginBtn" class="btn">Σύνδεση</button>
         <button id="logout" class="btn secondary" style="margin-left:auto;display:none">Αποσύνδεση</button>
       </div>
+      <div class="row">
+        <span id="userLine" class="hint">Δεν έχετε συνδεθεί</span>
+        <span id="roleBadge" class="tag" style="display:none"></span>
+        <button id="resetBtn" class="btn secondary" style="margin-left:auto">Ξέχασα τον κωδικό</button>
+      </div>
+      <div id="authMsg" class="hint" style="margin-top:6px"></div>
     </section>
 
     <!-- TOOLBAR: YEAR & LEGEND -->
@@ -141,7 +147,7 @@
   <script type="module">
     // -------------- Firebase SDKs --------------
     import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
-    import { getAuth, GoogleAuthProvider, signInWithPopup, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
+    import { getAuth, signInWithEmailAndPassword, sendPasswordResetEmail, onAuthStateChanged, signOut, signInAnonymously } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
     import { getFirestore, collection, doc, getDoc, getDocs, onSnapshot, addDoc, runTransaction } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
 
     // ---- CONFIG ----
@@ -160,8 +166,12 @@
     const db = getFirestore(app);
 
     // -------------- DOM refs --------------
-    const loginGoogle = document.getElementById('loginGoogle');
+    const emailInput = document.getElementById('email');
+    const passInput = document.getElementById('password');
+    const loginBtn = document.getElementById('loginBtn');
+    const resetBtn = document.getElementById('resetBtn');
     const logoutBtn = document.getElementById('logout');
+    const authMsg = document.getElementById('authMsg');
     const userLine = document.getElementById('userLine');
     const roleBadge = document.getElementById('roleBadge');
 
@@ -185,6 +195,55 @@
     const btnLoadEvents = document.getElementById('btnLoadEvents');
 
     const GRADES = ["Α","Β","Γ"]; const SECTIONS = GRADES.flatMap(g => Array.from({length:5}, (_,i)=> `${g}${i+1}`));
+
+    // -------------- Auth logic (Email/Password) --------------
+    loginBtn.addEventListener('click', async ()=>{
+      authMsg.textContent = '';
+      try{
+        await signInWithEmailAndPassword(auth, emailInput.value.trim(), passInput.value);
+      }catch(e){
+        console.error(e);
+        const map = {
+          'auth/invalid-credential': 'Λανθασμένα στοιχεία.',
+          'auth/user-not-found': 'Ο χρήστης δεν βρέθηκε.',
+          'auth/wrong-password': 'Λάθος κωδικός.',
+          'auth/too-many-requests': 'Πολλές προσπάθειες. Δοκιμάστε αργότερα.'
+        };
+        authMsg.textContent = map[e.code] || ('Σφάλμα σύνδεσης: '+ e.code);
+      }
+    });
+
+    resetBtn.addEventListener('click', async ()=>{
+      if(!emailInput.value){ authMsg.textContent = 'Πληκτρολόγησε email και ξανά πάτα «Ξέχασα τον κωδικό».'; return; }
+      try{ await sendPasswordResetEmail(auth, emailInput.value.trim()); authMsg.textContent = 'Στάλθηκε μήνυμα επαναφοράς κωδικού.'; }
+      catch(e){ authMsg.textContent = 'Αποτυχία αποστολής: ' + e.code; }
+    });
+
+    logoutBtn.addEventListener('click', ()=> signOut(auth));
+
+    onAuthStateChanged(auth, (user)=>{
+      // Auto anonymous sign-in for teachers (no credentials needed)
+      if(!user){
+        signInAnonymously(auth).catch(e=>console.error('Anonymous sign-in failed', e));
+        userLine.textContent = 'Κατάσταση: επισκέπτης';
+        roleBadge.style.display = 'none';
+        logoutBtn.style.display = 'none';
+      } else {
+        const isPrincipal = (user.uid===PRINCIPAL_UID) && user.providerData.some(p=>p.providerId==='password');
+        if(isPrincipal){
+          userLine.textContent = `Συνδεθήκατε ως Διευθυντής: ${user.email}`;
+          roleBadge.style.display = 'inline-block';
+          roleBadge.textContent = 'Διευθυντής';
+          logoutBtn.style.display = 'inline-block';
+        } else {
+          userLine.textContent = 'Κατάσταση: επισκέπτης/εκπαιδευτικός';
+          roleBadge.style.display = 'inline-block';
+          roleBadge.textContent = 'Επισκέπτης';
+          logoutBtn.style.display = 'none';
+        }
+      }
+      btnSubmitReq.disabled = !selectedDate || !auth.currentUser;
+    });
 
     // -------------- Calendar helpers --------------
     const fmtDate = d => d.toISOString().slice(0,10);
@@ -323,12 +382,9 @@
       }
 
       // Ζωντανή προ-επαλήθευση για το επιλεγμένο τμήμα
-      const section = reqSection.value; const type = reqType.value; const dateStr = fmtDate(d);
+      const section = reqSection.value; const type = reqType.value; const wk = isoWeekKey(d);
       const sameDay = evs.filter(x=> x.section===section);
-      if(type==='exam' && sameDay.some(x=> x.type==='exam')){
-        reqHint.textContent = '❌ Ήδη υπάρχει διαγώνισμα για το επιλεγμένο τμήμα την ίδια ημέρα.'; btnSubmitReq.disabled = true; return;
-      }
-      const wk = isoWeekKey(d);
+      if(type==='exam' && sameDay.some(x=> x.type==='exam')){ reqHint.textContent = '❌ Ήδη υπάρχει διαγώνισμα για το επιλεγμένο τμήμα την ίδια ημέρα.'; btnSubmitReq.disabled = true; return; }
       const weekCount = Array.from(eventsByDate.values()).flat().filter(x=> x.section===section && x.type==='exam' && x.weekKey===wk).length;
       if(type==='exam' && weekCount>=3){ reqHint.textContent = '❌ Το τμήμα έχει ήδη 3 διαγωνίσματα την εβδομάδα αυτή.'; btnSubmitReq.disabled = true; return; }
       reqHint.textContent = '✅ Μπορείς να υποβάλεις αίτημα.';
@@ -339,16 +395,14 @@
       if(!auth.currentUser){ alert('Απαιτείται σύνδεση.'); return; }
       if(!selectedDate){ alert('Διάλεξε ημερομηνία.'); return; }
       const dateStr = fmtDate(selectedDate);
-      // basic block on holidays
       if(holidaySet.has(dateStr)){ alert('Αργία/κλειδωμένη ημέρα.'); return; }
-      const d = selectedDate; const weekKey = isoWeekKey(d);
-      const payload = {
+      const d = selectedDate; const payload = {
         date: dateStr,
         type: reqType.value,
         section: reqSection.value,
         course: (reqCourse.value||'').trim(),
         teacher: (reqTeacher.value||'').trim(),
-        weekKey,
+        weekKey: isoWeekKey(d),
         year: d.getFullYear(),
         month: d.getMonth()+1,
         schoolStartYear: (d.getMonth()>=8 ? d.getFullYear() : d.getFullYear()-1),
@@ -421,15 +475,6 @@
         }
         eventsList.appendChild(row);
       }
-    });
-
-    // -------------- Auth UI wiring --------------
-    loginGoogle.addEventListener('click', async ()=>{ const provider = new GoogleAuthProvider(); try{ await signInWithPopup(auth, provider); }catch(e){ console.error(e); } });
-    logoutBtn.addEventListener('click', ()=> signOut(auth));
-    onAuthStateChanged(auth, (user)=>{
-      if(user){ userLine.textContent = `Συνδεθήκατε ως ${user.email}`; logoutBtn.style.display='inline-block'; roleBadge.style.display='inline-block'; roleBadge.textContent = (user.uid===PRINCIPAL_UID)?'Διευθυντής':'Εκπαιδευτικός'; }
-      else { userLine.textContent = 'Δεν έχετε συνδεθεί'; logoutBtn.style.display='none'; roleBadge.style.display='none'; }
-      btnSubmitReq.disabled = !selectedDate || !auth.currentUser;
     });
 
     // -------------- Controls --------------
