@@ -1,0 +1,455 @@
+<!DOCTYPE html>
+<html lang="el">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>1ο Γυμνάσιο Πυλαίας — Σχολικό Ημερολόγιο</title>
+  <style>
+    :root{
+      --bg:#f7f7fb; --card:#ffffff; --ink:#1f2937; --muted:#6b7280; --line:#e5e7eb; --brand:#4f46e5;
+      --ok:#065f46; --warn:#92400e; --err:#991b1b;
+      --holiday:#fee2e2; --holiday-b:#fecaca; --school:#fef3c7; --school-b:#fde68a;
+      --pill:#f3f4f6; --pill-b:#d1d5db;
+    }
+    *{box-sizing:border-box}
+    html,body{height:100%}
+    body{margin:0;font:14px system-ui,-apple-system,Segoe UI,Roboto,Ubuntu,"Helvetica Neue",Arial;color:var(--ink);background:var(--bg)}
+    header{background:linear-gradient(90deg,#0f172a,#1e293b);color:#fff;padding:18px}
+    h1{margin:0 0 2px;font-size:22px}
+    .sub{opacity:.86}
+    .wrap{max-width:1200px;margin:0 auto;padding:20px}
+
+    .toolbar{display:flex;gap:12px;flex-wrap:wrap;align-items:center;margin:16px 0}
+    .sel,.btn,.input{border:1px solid var(--line);border-radius:12px;padding:10px 12px;background:#fff;font:inherit}
+    .btn{background:var(--brand);color:#fff;border-color:transparent;cursor:pointer}
+    .btn.secondary{background:#fff;color:var(--ink);border-color:var(--line)}
+    .btn[disabled]{opacity:.5;cursor:not-allowed}
+    .legend{margin-left:auto;display:flex;align-items:center;gap:10px;color:var(--muted)}
+    .dot{width:12px;height:12px;border-radius:3px;display:inline-block;border:1px solid}
+
+    .grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:16px}
+    @media (max-width:1024px){.grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
+    @media (max-width:640px){.grid{grid-template-columns:1fr}}
+
+    .month{background:var(--card);border:1px solid var(--line);border-radius:16px;overflow:hidden}
+    .month h2{margin:0;padding:10px 12px;border-bottom:1px solid var(--line);font-size:15px}
+    .head{display:grid;grid-template-columns:repeat(7,1fr);gap:0;background:#fafafa;border-bottom:1px solid var(--line)}
+    .head div{padding:6px 0;text-align:center;font-weight:600;color:#555}
+
+    .weeks{display:flex;flex-direction:column}
+    .week{display:grid;grid-template-columns:repeat(7,1fr)}
+    .day{min-height:96px;border-right:1px solid var(--line);padding:6px}
+    .week .day:last-child{border-right:0}
+    .week+.week{border-top:1px solid var(--line)}
+    .dnum{font-size:12px;font-weight:700}
+    .cell{width:100%;height:100%;border-radius:12px;text-align:left;background:transparent;border:0;padding:6px;cursor:pointer}
+    .cell:hover{background:#f6f7fb}
+    .cell[disabled]{opacity:.55;cursor:not-allowed}
+    .holiday{background:var(--holiday);border:1px solid var(--holiday-b)}
+    .schoolday{background:var(--school);border:1px solid var(--school-b)}
+
+    .chip{font-size:11px;padding:2px 6px;border-radius:999px;border:1px solid;display:inline-block}
+    .exam{background:#eef2ff;border-color:#c7d2fe}
+    .visit{background:#ecfdf5;border-color:#a7f3d0}
+
+    .panel{margin-top:16px;background:#fff;border:1px solid var(--line);border-radius:16px;padding:16px}
+    .row{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+    .grow{flex:1 1 180px}
+    .hint{color:var(--muted)}
+    .list{margin-top:12px;display:flex;flex-direction:column;gap:8px}
+    .item{border:1px solid var(--line);border-radius:12px;padding:8px;display:flex;justify-content:space-between;align-items:center}
+    .tag{display:inline-block;background:var(--pill);border:1px solid var(--pill-b);padding:2px 8px;border-radius:999px;font-size:12px;margin-right:6px}
+
+    footer{margin-top:28px;padding:20px;text-align:center;background:#f9fafb;border-top:1px solid var(--line);font-size:13px}
+  </style>
+</head>
+<body>
+  <header>
+    <h1>1ο Γυμνάσιο Πυλαίας</h1>
+    <div class="sub">Σχολικό Ημερολόγιο Διαγωνισμάτων & Διδακτικών Επισκέψεων (1 Σεπτεμβρίου → 30 Ιουνίου)</div>
+  </header>
+
+  <div class="wrap">
+    <!-- AUTH BAR -->
+    <section class="panel" aria-label="Σύνδεση">
+      <div class="row">
+        <button id="loginGoogle" class="btn">Σύνδεση με Google</button>
+        <span id="userLine" class="hint"></span>
+        <span id="roleBadge" class="tag" style="display:none"></span>
+        <button id="logout" class="btn secondary" style="margin-left:auto;display:none">Αποσύνδεση</button>
+      </div>
+    </section>
+
+    <!-- TOOLBAR: YEAR & LEGEND -->
+    <section class="toolbar">
+      <label for="year">Σχολικό έτος (έναρξη):</label>
+      <select id="year" class="sel" aria-label="Σχολικό έτος"></select>
+      <label class="row" style="gap:6px">
+        <input type="checkbox" id="toggle17" />
+        <span>Σήμανση 17/11 (σχολική)</span>
+      </label>
+      <div class="legend">
+        <span class="dot" style="background:var(--holiday);border-color:var(--holiday-b)"></span> Αργία
+        <span class="dot" style="background:var(--school);border-color:var(--school-b)"></span> 17/11
+      </div>
+    </section>
+
+    <!-- CALENDAR GRID (shows OFFICIAL events from Firestore) -->
+    <section id="months" class="grid" aria-live="polite"></section>
+
+    <!-- TEACHER REQUEST PANEL -->
+    <section class="panel" aria-labelledby="formTitle">
+      <div class="row">
+        <div id="formTitle" class="hint">Επιλεγμένη ημερομηνία: <strong id="selDate">—</strong></div>
+        <select id="reqType" class="sel" aria-label="Τύπος γεγονότος">
+          <option value="exam">Διαγώνισμα</option>
+          <option value="visit">Διδακτική Επίσκεψη</option>
+        </select>
+        <select id="reqSection" class="sel"></select>
+        <input id="reqCourse" class="input grow" placeholder="Μάθημα (π.χ. Μαθηματικά)" />
+        <input id="reqTeacher" class="input grow" placeholder="Εκπ/κός (π.χ. Παπαδόπουλος)" />
+        <button id="btnSubmitReq" class="btn" disabled>Υποβολή Αιτήματος</button>
+      </div>
+      <div class="hint" id="reqHint" style="margin-top:6px"></div>
+      <div class="list" id="dayEventsList"></div>
+    </section>
+
+    <!-- PRINCIPAL: PENDING REQUESTS -->
+    <section class="panel" aria-label="Έγκριση αιτημάτων">
+      <h3 style="margin:0 0 8px">Εκκρεμή Αιτήματα (Μόνο Διευθυντής)</h3>
+      <div id="pendingList" class="list"><div class="item">Φόρτωση...</div></div>
+    </section>
+
+    <!-- PRINCIPAL: EVENTS BROWSER (per section/year) -->
+    <section class="panel" aria-label="Επίσημα γεγονότα">
+      <h3 style="margin:0 0 8px">Επίσημα Γεγονότα</h3>
+      <div class="row">
+        <label>Τμήμα:</label>
+        <select id="evSection" class="sel"></select>
+        <label>Έτος έναρξης:</label>
+        <select id="evStartYear" class="sel"></select>
+        <button id="btnLoadEvents" class="btn secondary">Προβολή</button>
+      </div>
+      <div id="eventsList" class="list" style="margin-top:10px"></div>
+    </section>
+  </div>
+
+  <footer>
+    Δημιουργία: Παναγιώτης Δόμβρος, Διευθυντής 1ου Γυμνασίου Πυλαίας
+  </footer>
+
+  <script type="module">
+    // -------------- Firebase SDKs --------------
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
+    import { getAuth, GoogleAuthProvider, signInWithPopup, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
+    import { getFirestore, collection, doc, getDoc, getDocs, onSnapshot, addDoc, runTransaction } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
+
+    // ---- CONFIG ----
+    const firebaseConfig = {
+      apiKey: "AIzaSyCtQQlAbGEXBSpx_pWl4TWehGsJKSCRPpo",
+      authDomain: "schoolcalendar-68fd6.firebaseapp.com",
+      projectId: "schoolcalendar-68fd6",
+      storageBucket: "schoolcalendar-68fd6.firebasestorage.app",
+      messagingSenderId: "370718858137",
+      appId: "1:370718858137:web:3fa3814200d630d1a75108"
+    };
+    const PRINCIPAL_UID = "QFkO9F8cIagPuj4lcC5nqFxrpg72"; // Μόνιμος Διευθυντής
+
+    const app = initializeApp(firebaseConfig);
+    const auth = getAuth(app);
+    const db = getFirestore(app);
+
+    // -------------- DOM refs --------------
+    const loginGoogle = document.getElementById('loginGoogle');
+    const logoutBtn = document.getElementById('logout');
+    const userLine = document.getElementById('userLine');
+    const roleBadge = document.getElementById('roleBadge');
+
+    const yearSel = document.getElementById('year');
+    const monthsEl = document.getElementById('months');
+    const toggle17 = document.getElementById('toggle17');
+
+    const selDateEl = document.getElementById('selDate');
+    const reqType = document.getElementById('reqType');
+    const reqSection = document.getElementById('reqSection');
+    const reqCourse = document.getElementById('reqCourse');
+    const reqTeacher = document.getElementById('reqTeacher');
+    const btnSubmitReq = document.getElementById('btnSubmitReq');
+    const reqHint = document.getElementById('reqHint');
+    const dayEventsList = document.getElementById('dayEventsList');
+
+    const pendingList = document.getElementById('pendingList');
+    const eventsList = document.getElementById('eventsList');
+    const evSection = document.getElementById('evSection');
+    const evStartYear = document.getElementById('evStartYear');
+    const btnLoadEvents = document.getElementById('btnLoadEvents');
+
+    const GRADES = ["Α","Β","Γ"]; const SECTIONS = GRADES.flatMap(g => Array.from({length:5}, (_,i)=> `${g}${i+1}`));
+
+    // -------------- Calendar helpers --------------
+    const fmtDate = d => d.toISOString().slice(0,10);
+    const parseYMD = s => { const [y,m,da] = s.split('-').map(Number); return new Date(y, m-1, da); };
+    const addDays = (d,n)=>{ const x=new Date(d); x.setDate(x.getDate()+n); return x; };
+    const inRange = (d,a,b)=> d>=a && d<=b;
+    function startOfISOWeek(date){ const d=new Date(date); const day=(d.getDay()+6)%7; d.setDate(d.getDate()-day); d.setHours(0,0,0,0); return d; }
+    const isoWeekKey = (date)=> fmtDate(startOfISOWeek(date));
+
+    // Ορθόδοξο Πάσχα (Meeus – Julian → Gregorian +13 για 1900–2099)
+    function orthodoxEasterGregorian(year){
+      const a = year % 4, b = year % 7, c = year % 19;
+      const d = (19*c + 15) % 30; const e = (2*a + 4*b + 6*d + 6) % 7;
+      let day = 22 + d + e; let month = 3; if(day>31){ month=4; day-=31; }
+      const jul = new Date(Date.UTC(year, month-1, day)); jul.setUTCDate(jul.getUTCDate()+13);
+      return new Date(jul.getUTCFullYear(), jul.getUTCMonth(), jul.getUTCDate());
+    }
+    function greekPublicHolidaysForSchoolYear(startYear, includeSchoolOnly){
+      const nextYear = startYear+1;
+      const windowStart = new Date(startYear,8,1); const windowEnd = new Date(nextYear,5,30);
+      const fixed = [ new Date(startYear,9,28), new Date(startYear,11,25), new Date(startYear,11,26), new Date(nextYear,0,1), new Date(nextYear,0,6), new Date(nextYear,2,25), new Date(nextYear,4,1) ];
+      const easter = orthodoxEasterGregorian(nextYear);
+      const mobile = [ addDays(easter,-48), addDays(easter,-2), addDays(easter,1), addDays(easter,50) ];
+      const schoolOnly = includeSchoolOnly ? [ new Date(startYear,10,17) ] : [];
+      return [...fixed, ...mobile, ...schoolOnly]
+        .filter(d=> inRange(d, windowStart, windowEnd))
+        .map(d=> ({ date: fmtDate(d), kind: schoolOnly.some(s=> fmtDate(s)===fmtDate(d)) ? 'school' : 'public' }));
+    }
+
+    // -------------- State --------------
+    const today = new Date();
+    const defaultStartYear = (today.getMonth()>=8 ? today.getFullYear() : today.getFullYear()-1);
+    let startYear = defaultStartYear;
+    let includeSchool17 = true;
+    let windowStart, windowEnd, months, holidays, holidaySet;
+    let selectedDate = null;
+
+    // Firestore-driven OFFICIAL events cache
+    let sectionUnsubs = {};              // per-section onSnapshot unsubs
+    let sectionEvents = {};              // { section: Map(dateId -> Event) }
+    let eventsByDate = new Map();        // Map(dateId -> Event[])
+
+    function rebuildEventsByDate(){
+      eventsByDate = new Map();
+      for(const s of Object.keys(sectionEvents)){
+        for(const [dateId, ev] of sectionEvents[s].entries()){
+          if(!eventsByDate.has(dateId)) eventsByDate.set(dateId, []);
+          eventsByDate.get(dateId).push(ev);
+        }
+      }
+    }
+
+    // -------------- UI Fill --------------
+    function fillSections(){ reqSection.innerHTML = SECTIONS.map(s=>`<option value="${s}">${s}</option>`).join(''); evSection.innerHTML = SECTIONS.map(s=>`<option value="${s}">${s}</option>`).join(''); }
+    function fillYearSelect(){ const years = Array.from({length:6}, (_,i)=> defaultStartYear - 2 + i); yearSel.innerHTML = years.map(y=>`<option value="${y}">${y}–${y+1}</option>`).join(''); yearSel.value = String(startYear); const y2 = Array.from({length:6}, (_,i)=> defaultStartYear - 2 + i); evStartYear.innerHTML = y2.map(y=>`<option value="${y}">${y}–${y+1}</option>`).join(''); }
+
+    // -------------- Window & months --------------
+    function computeWindow(){
+      windowStart = new Date(startYear,8,1); windowEnd = new Date(startYear+1,5,30);
+      months = [ {y:startYear,m:8,label:'Σεπ'}, {y:startYear,m:9,label:'Οκτ'}, {y:startYear,m:10,label:'Νοε'}, {y:startYear,m:11,label:'Δεκ'}, {y:startYear+1,m:0,label:'Ιαν'}, {y:startYear+1,m:1,label:'Φεβ'}, {y:startYear+1,m:2,label:'Μαρ'}, {y:startYear+1,m:3,label:'Απρ'}, {y:startYear+1,m:4,label:'Μαι'}, {y:startYear+1,m:5,label:'Ιουν'} ];
+      holidays = greekPublicHolidaysForSchoolYear(startYear, includeSchool17); holidaySet = new Set(holidays.map(h=>h.date));
+    }
+
+    // -------------- Firestore subscriptions --------------
+    async function subscribeYearEvents(){
+      // clear previous
+      for(const k of Object.keys(sectionUnsubs)){ try{ sectionUnsubs[k](); }catch{} }
+      sectionUnsubs = {}; sectionEvents = {}; eventsByDate = new Map();
+
+      for(const s of SECTIONS){
+        sectionEvents[s] = new Map();
+        const coll = collection(db, 'events', s, String(startYear));
+        sectionUnsubs[s] = onSnapshot(coll, (snap)=>{
+          sectionEvents[s].clear();
+          snap.forEach(d=>{ const ev = d.data(); sectionEvents[s].set(d.id, ev); });
+          rebuildEventsByDate();
+          renderAll();
+        }, (err)=> console.error('events sub error', err));
+      }
+    }
+
+    // -------------- Rendering --------------
+    function eventsOnDate(date){ const key = fmtDate(date); return (eventsByDate.get(key)||[]).slice(); }
+
+    function renderMonth({y,m,label}){
+      const first = new Date(y,m,1); const startOffset = (first.getDay()+6)%7; const daysInMonth = new Date(y,m+1,0).getDate();
+      const cells = []; for(let i=0;i<startOffset;i++) cells.push(null); for(let d=1; d<=daysInMonth; d++) cells.push(new Date(y,m,d)); while(cells.length % 7 !== 0) cells.push(null);
+      const weeks = []; for(let i=0;i<cells.length;i+=7) weeks.push(cells.slice(i,i+7));
+      const monthEl = document.createElement('div'); monthEl.className='month'; monthEl.innerHTML=`<h2>${label} ${y}</h2><div class="head">${['Δε','Τρ','Τε','Πε','Πα','Σα','Κυ'].map(h=>`<div>${h}</div>`).join('')}</div><div class="weeks"></div>`;
+      const weeksEl = monthEl.querySelector('.weeks');
+
+      for(const w of weeks){
+        const row = document.createElement('div'); row.className='week';
+        for(const d of w){
+          const cell = document.createElement('div'); cell.className='day'; if(d===null){ row.appendChild(cell); continue; }
+          const key = fmtDate(d); const isInWindow = inRange(d, windowStart, windowEnd); const isHoliday = holidaySet.has(key); const holidayKind = holidays.find(h=>h.date===key)?.kind;
+          const btn = document.createElement('button'); btn.type='button'; btn.className='cell'; btn.setAttribute('aria-label', `Ημέρα ${key}`);
+          if(!isInWindow || isHoliday){ btn.disabled = true; } if(isHoliday) btn.classList.add(holidayKind==='public' ? 'holiday' : 'schoolday');
+          const n = document.createElement('div'); n.className='dnum'; n.textContent = String(d.getDate()); btn.appendChild(n);
+          const evs = eventsOnDate(d);
+          if(evs.length){
+            const wrap = document.createElement('div'); wrap.style.marginTop='4px';
+            evs.slice(0,3).forEach(ev=>{ const tag=document.createElement('div'); tag.className='chip ' + (ev.type==='exam'?'exam':'visit'); tag.textContent = `${ev.section} · ${ev.type==='exam'?'Διαγ.':'Επίσκ.'}${ev.course?` · ${ev.course}`:''}`; wrap.appendChild(tag); });
+            if(evs.length>3){ const more=document.createElement('div'); more.className='chip'; more.textContent = `+${evs.length-3}`; wrap.appendChild(more); }
+            btn.appendChild(wrap);
+          }
+          btn.addEventListener('click', ()=> selectDate(d));
+          cell.appendChild(btn); row.appendChild(cell);
+        }
+        weeksEl.appendChild(row);
+      }
+      return monthEl;
+    }
+
+    function renderAll(){
+      computeWindow(); monthsEl.innerHTML=''; months.forEach(m => monthsEl.appendChild(renderMonth(m)));
+      if(selectedDate && inRange(selectedDate, windowStart, windowEnd) && !holidaySet.has(fmtDate(selectedDate))){ updateDayPanel(selectedDate); } else { selectedDate=null; updateDayPanel(null); }
+    }
+
+    function selectDate(d){ selectedDate = d; updateDayPanel(d); }
+
+    function updateDayPanel(d){
+      selDateEl.textContent = d ? fmtDate(d) : '—';
+      btnSubmitReq.disabled = !d || !auth.currentUser;
+      dayEventsList.innerHTML = '';
+      reqHint.textContent = '';
+      if(!d){ dayEventsList.innerHTML = '<div class="hint">Επίλεξε ημερομηνία στο ημερολόγιο.</div>'; return; }
+      const evs = eventsOnDate(d);
+      if(!evs.length){ dayEventsList.innerHTML = '<div class="hint">Δεν υπάρχουν επίσημες καταχωρίσεις για αυτή την ημέρα.</div>'; }
+      else{
+        evs.forEach(ev=>{
+          const row=document.createElement('div'); row.className='item';
+          row.innerHTML = `<div><span class="tag">${ev.section}</span> <strong>${ev.type==='exam'?'Διαγώνισμα':'Επίσκεψη'}</strong> — ${ev.dateId} ${ev.course?('· '+ev.course):''} ${ev.teacher?('· '+ev.teacher):''}</div>`;
+          dayEventsList.appendChild(row);
+        });
+      }
+
+      // Ζωντανή προ-επαλήθευση για το επιλεγμένο τμήμα
+      const section = reqSection.value; const type = reqType.value; const dateStr = fmtDate(d);
+      const sameDay = evs.filter(x=> x.section===section);
+      if(type==='exam' && sameDay.some(x=> x.type==='exam')){
+        reqHint.textContent = '❌ Ήδη υπάρχει διαγώνισμα για το επιλεγμένο τμήμα την ίδια ημέρα.'; btnSubmitReq.disabled = true; return;
+      }
+      const wk = isoWeekKey(d);
+      const weekCount = Array.from(eventsByDate.values()).flat().filter(x=> x.section===section && x.type==='exam' && x.weekKey===wk).length;
+      if(type==='exam' && weekCount>=3){ reqHint.textContent = '❌ Το τμήμα έχει ήδη 3 διαγωνίσματα την εβδομάδα αυτή.'; btnSubmitReq.disabled = true; return; }
+      reqHint.textContent = '✅ Μπορείς να υποβάλεις αίτημα.';
+    }
+
+    // -------------- Submit Request (Teacher) --------------
+    btnSubmitReq.addEventListener('click', async ()=>{
+      if(!auth.currentUser){ alert('Απαιτείται σύνδεση.'); return; }
+      if(!selectedDate){ alert('Διάλεξε ημερομηνία.'); return; }
+      const dateStr = fmtDate(selectedDate);
+      // basic block on holidays
+      if(holidaySet.has(dateStr)){ alert('Αργία/κλειδωμένη ημέρα.'); return; }
+      const d = selectedDate; const weekKey = isoWeekKey(d);
+      const payload = {
+        date: dateStr,
+        type: reqType.value,
+        section: reqSection.value,
+        course: (reqCourse.value||'').trim(),
+        teacher: (reqTeacher.value||'').trim(),
+        weekKey,
+        year: d.getFullYear(),
+        month: d.getMonth()+1,
+        schoolStartYear: (d.getMonth()>=8 ? d.getFullYear() : d.getFullYear()-1),
+        status: 'pending',
+        createdBy: auth.currentUser.uid,
+        createdAt: Date.now()
+      };
+      try{ await addDoc(collection(db,'requests'), payload); alert('✅ Το αίτημα καταχωρίστηκε.'); reqCourse.value=''; }
+      catch(e){ console.error(e); alert('❌ Σφάλμα στην υποβολή.'); }
+    });
+
+    // -------------- Principal: Pending Requests --------------
+    function eventRef(section, schoolStartYear, dateId){ return doc(db, 'events', section, String(schoolStartYear), dateId); }
+    function weeklyRef(section, schoolStartYear, weekKey){ return doc(db, 'weekly', `${section}_${schoolStartYear}`, weekKey); }
+
+    onSnapshot(collection(db,'requests'), (snap)=>{
+      pendingList.innerHTML = '';
+      if(!snap.size){ pendingList.innerHTML = '<div class="item">Δεν υπάρχουν εκκρεμή αιτήματα.</div>'; return; }
+      snap.forEach(docSnap=>{
+        const r = docSnap.data(); const id = docSnap.id;
+        const row = document.createElement('div'); row.className='item';
+        row.innerHTML = `<div><span class="tag">${r.section}</span> <strong>${r.type==='exam'?'Διαγώνισμα':'Επίσκεψη'}</strong> — ${r.date} ${r.course?('· '+r.course):''} ${r.teacher?('· '+r.teacher):''}</div>`;
+        const box = document.createElement('div');
+        const approve = document.createElement('button'); approve.className='btn'; approve.textContent='Έγκριση';
+        approve.addEventListener('click', ()=> approveRequest(id, r));
+        const reject = document.createElement('button'); reject.className='btn secondary'; reject.textContent='Διαγραφή';
+        reject.addEventListener('click', async ()=>{ if(!auth.currentUser || auth.currentUser.uid!==PRINCIPAL_UID){ return alert('Μόνο ο Διευθυντής.'); } const { deleteDoc } = await import('https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js'); await deleteDoc(doc(db,'requests',id)); });
+        box.appendChild(approve); box.appendChild(reject); row.appendChild(box); pendingList.appendChild(row);
+      });
+    });
+
+    async function approveRequest(id, r){
+      if(!auth.currentUser || auth.currentUser.uid!==PRINCIPAL_UID){ return alert('Μόνο ο Διευθυντής.'); }
+      const d = new Date(r.date+'T00:00:00'); const weekKey = isoWeekKey(d); const schoolStartYear = (d.getMonth()>=8 ? d.getFullYear() : d.getFullYear()-1);
+      const eRef = eventRef(r.section, schoolStartYear, r.date); const wRef = weeklyRef(r.section, schoolStartYear, weekKey);
+      try{
+        await runTransaction(db, async (tx)=>{
+          const eSnap = await tx.get(eRef); if(eSnap.exists()) throw new Error('Υπάρχει ήδη γεγονός για το τμήμα την ημέρα αυτή.');
+          if(r.type==='exam'){
+            const wSnap = await tx.get(wRef); const prev = wSnap.exists() ? (wSnap.data().examCount||0) : 0; if(prev>=3) throw new Error('Ήδη 3 διαγωνίσματα αυτή την εβδομάδα.');
+            tx.set(eRef, { type:'exam', section:r.section, dateId:r.date, weekKey, year:d.getFullYear(), month:d.getMonth()+1, schoolStartYear, course:r.course||'', teacher:r.teacher||'', createdAt: Date.now() });
+            if(wSnap.exists()) tx.update(wRef, { examCount: prev+1 }); else tx.set(wRef, { examCount: 1 });
+          } else { tx.set(eRef, { type:'visit', section:r.section, dateId:r.date, weekKey, year:d.getFullYear(), month:d.getMonth()+1, schoolStartYear, course:r.course||'', teacher:r.teacher||'', createdAt: Date.now() }); }
+          tx.delete(doc(db,'requests',id));
+        });
+        alert('✅ Εγκρίθηκε.');
+      }catch(e){ alert('❌ '+e.message); }
+    }
+
+    // -------------- Principal: Events viewer --------------
+    btnLoadEvents.addEventListener('click', async ()=>{
+      const s = evSection.value; const y = evStartYear.value; eventsList.innerHTML = '<div class="item">Φόρτωση...</div>';
+      const yearColl = collection(db, 'events', s, String(y)); const snap = await getDocs(yearColl);
+      const arr = []; snap.forEach(d=> arr.push({ id:d.id, ...d.data() })); arr.sort((a,b)=> a.dateId.localeCompare(b.dateId));
+      eventsList.innerHTML=''; if(!arr.length){ eventsList.innerHTML='<div class="item">Δεν βρέθηκαν γεγονότα.</div>'; return; }
+      for(const e of arr){
+        const row=document.createElement('div'); row.className='item'; row.innerHTML = `<div><span class="tag">${e.section}</span> <strong>${e.type==='exam'?'Διαγώνισμα':'Επίσκεψη'}</strong> — ${e.dateId} ${e.course?('· '+e.course):''} ${e.teacher?('· '+e.teacher):''}</div>`;
+        if(auth.currentUser && auth.currentUser.uid===PRINCIPAL_UID){
+          const box=document.createElement('div'); const del=document.createElement('button'); del.className='btn secondary'; del.textContent='Διαγραφή';
+          del.addEventListener('click', async ()=>{
+            await runTransaction(db, async (tx)=>{
+              if(e.type==='exam'){
+                const wRef = weeklyRef(e.section, e.schoolStartYear, e.weekKey); const wSnap = await tx.get(wRef); const prev = wSnap.exists() ? (wSnap.data().examCount||0) : 0; const next = Math.max(0, prev-1); if(wSnap.exists()) tx.update(wRef,{examCount:next}); else tx.set(wRef,{examCount:0});
+              }
+              tx.delete(eventRef(e.section, e.schoolStartYear, e.dateId));
+            });
+            btnLoadEvents.click();
+          });
+          box.appendChild(del); row.appendChild(box);
+        }
+        eventsList.appendChild(row);
+      }
+    });
+
+    // -------------- Auth UI wiring --------------
+    loginGoogle.addEventListener('click', async ()=>{ const provider = new GoogleAuthProvider(); try{ await signInWithPopup(auth, provider); }catch(e){ console.error(e); } });
+    logoutBtn.addEventListener('click', ()=> signOut(auth));
+    onAuthStateChanged(auth, (user)=>{
+      if(user){ userLine.textContent = `Συνδεθήκατε ως ${user.email}`; logoutBtn.style.display='inline-block'; roleBadge.style.display='inline-block'; roleBadge.textContent = (user.uid===PRINCIPAL_UID)?'Διευθυντής':'Εκπαιδευτικός'; }
+      else { userLine.textContent = 'Δεν έχετε συνδεθεί'; logoutBtn.style.display='none'; roleBadge.style.display='none'; }
+      btnSubmitReq.disabled = !selectedDate || !auth.currentUser;
+    });
+
+    // -------------- Controls --------------
+    function initYearAndSections(){
+      const years = Array.from({length:6}, (_,i)=> defaultStartYear - 2 + i);
+      yearSel.innerHTML = years.map(y=>`<option value="${y}">${y}–${y+1}</option>`).join(''); yearSel.value=String(startYear);
+      evStartYear.innerHTML = years.map(y=>`<option value="${y}">${y}–${y+1}</option>`).join('');
+      reqSection.innerHTML = SECTIONS.map(s=>`<option value="${s}">${s}</option>`).join('');
+      evSection.innerHTML = SECTIONS.map(s=>`<option value="${s}">${s}</option>`).join('');
+    }
+
+    function render(){ computeWindow(); renderAll(); }
+
+    yearSel.addEventListener('change', ()=>{ startYear = parseInt(yearSel.value,10); subscribeYearEvents(); render(); });
+    toggle17.addEventListener('change', ()=>{ includeSchool17 = toggle17.checked; render(); });
+    reqSection.addEventListener('change', ()=> updateDayPanel(selectedDate));
+    reqType.addEventListener('change', ()=> updateDayPanel(selectedDate));
+
+    // -------------- boot --------------
+    initYearAndSections(); toggle17.checked = includeSchool17; subscribeYearEvents(); render();
+  </script>
+</body>
+</html>
